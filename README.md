@@ -22,7 +22,7 @@ PB6MFP_ADC0_CH6
 
 2. below is screen capture , test conversion timing 
 
-![image](https://github.com/released/M031BSP_ADC_MultiCH_IRQ/blob/main/convert_timing.jpg)
+![image](https://github.com/released/M031BSP_ADC_MultiCH_IRQ/blob/master/convert_timing.jpg)
 
 
 
