@@ -5,176 +5,370 @@
                           AREA ||i.ADC_IRQHandler||, CODE, READONLY, ALIGN=2
 
                   ADC_IRQHandler PROC
-;;;122    
-;;;123    void ADC_IRQHandler(void)
-000000  b510              PUSH     {r4,lr}
-;;;124    {
-;;;125    	uint8_t ch_idx = 0;
-000002  2000              MOVS     r0,#0
-;;;126    
-;;;127    	for (ch_idx = 0 ; adc_data[ch_idx].idx < 0xFF ; ch_idx++)
-;;;128    	{
-;;;129    		if (aADCxCH == adc_data[ch_idx].adc_ch)
-000004  4b0d              LDR      r3,|L1.60|
-000006  4a0e              LDR      r2,|L1.64|
-000008  e006              B        |L1.24|
-                  |L1.10|
-00000a  1889              ADDS     r1,r1,r2
-00000c  7849              LDRB     r1,[r1,#1]
-00000e  885c              LDRH     r4,[r3,#2]  ; aADCxCH
-000010  42a1              CMP      r1,r4
-000012  d005              BEQ      |L1.32|
-000014  1c40              ADDS     r0,r0,#1
-000016  b2c0              UXTB     r0,r0                 ;127
-                  |L1.24|
-000018  0041              LSLS     r1,r0,#1              ;127
-00001a  5c54              LDRB     r4,[r2,r1]            ;127
-00001c  2cff              CMP      r4,#0xff              ;127
-00001e  d3f4              BCC      |L1.10|
-                  |L1.32|
-;;;130    		{
-;;;131    			break;
-;;;132    		}
-;;;133    		else
-;;;134    		{
-;;;135    			continue;
-;;;136    		}
-;;;137    	}
-;;;138    	ADCxConvertedData[ch_idx] = ADC_GET_CONVERSION_DATA(ADC, aADCxCH);
-000020  8859              LDRH     r1,[r3,#2]  ; aADCxCH
-000022  4a08              LDR      r2,|L1.68|
-000024  0089              LSLS     r1,r1,#2
-000026  1889              ADDS     r1,r1,r2
-000028  6809              LDR      r1,[r1,#0]
-00002a  4a04              LDR      r2,|L1.60|
-00002c  0040              LSLS     r0,r0,#1
-00002e  320c              ADDS     r2,r2,#0xc
-000030  5211              STRH     r1,[r2,r0]
-;;;139    	
-;;;140        ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT); /* Clear the A/D interrupt flag */
-000032  4904              LDR      r1,|L1.68|
-000034  2001              MOVS     r0,#1
-000036  3180              ADDS     r1,r1,#0x80
-000038  6108              STR      r0,[r1,#0x10]
-;;;141    }
-00003a  bd10              POP      {r4,pc}
-;;;142    
+;;;137    
+;;;138    void ADC_IRQHandler(void)
+000000  4808              LDR      r0,|L1.36|
+;;;139    {
+;;;140    	set_flag(flag_ADC_Data_Ready,ENABLE);	
+000002  68c2              LDR      r2,[r0,#0xc]  ; BitFlag
+000004  2101              MOVS     r1,#1
+000006  430a              ORRS     r2,r2,r1
+000008  60c2              STR      r2,[r0,#0xc]  ; BitFlag
+;;;141    	MONITOR_PIN = 1;
+00000a  4a07              LDR      r2,|L1.40|
+00000c  63d1              STR      r1,[r2,#0x3c]
+;;;142    	ADC_Datax = ADC_GET_CONVERSION_DATA(ADC, ADC_TargetChannel);	
+00000e  8802              LDRH     r2,[r0,#0]  ; ADC_TargetChannel
+000010  4b06              LDR      r3,|L1.44|
+000012  0092              LSLS     r2,r2,#2
+000014  18d2              ADDS     r2,r2,r3
+000016  6812              LDR      r2,[r2,#0]
+000018  8042              STRH     r2,[r0,#2]
+;;;143        ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT); /* Clear the A/D interrupt flag */
+00001a  4804              LDR      r0,|L1.44|
+00001c  3080              ADDS     r0,r0,#0x80
+00001e  6101              STR      r1,[r0,#0x10]
+;;;144    }
+000020  4770              BX       lr
+;;;145    
                           ENDP
 
-                  |L1.60|
+000022  0000              DCW      0x0000
+                  |L1.36|
                           DCD      ||.data||
-                  |L1.64|
-                          DCD      ||.constdata||
-                  |L1.68|
+                  |L1.40|
+                          DCD      0x40004840
+                  |L1.44|
                           DCD      0x40043000
 
                           AREA ||i.ADC_InitChannel||, CODE, READONLY, ALIGN=2
 
                   ADC_InitChannel PROC
-;;;173    
-;;;174    void ADC_InitChannel(uint8_t ch)
+;;;176    
+;;;177    void ADC_InitChannel(uint8_t ch)
 000000  b5f8              PUSH     {r3-r7,lr}
-;;;175    {
-;;;176    //	ADC_ReadAVdd();
-;;;177    
-;;;178    //    /* Enable ADC converter */
-;;;179    //    ADC_POWER_ON(ADC);
+;;;178    {
+;;;179    	set_flag(flag_ADC_Data_Ready,DISABLE);
+000002  4914              LDR      r1,|L2.84|
+000004  68ca              LDR      r2,[r1,#0xc]  ; BitFlag
+000006  0852              LSRS     r2,r2,#1
+000008  0052              LSLS     r2,r2,#1
+00000a  60ca              STR      r2,[r1,#0xc]  ; BitFlag
 ;;;180    
-;;;181    //    /*Wait for ADC internal power ready*/
-;;;182    //    CLK_SysTickDelay(10000);
-;;;183    
-;;;184        /* Set input mode as single-end, and Single mode*/
-;;;185        ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE,(uint32_t) 0x1 << ch);//BIT0|BIT4
-000002  2601              MOVS     r6,#1
-000004  4633              MOV      r3,r6
-000006  4083              LSLS     r3,r3,r0
-000008  4f0e              LDR      r7,|L2.68|
-00000a  2200              MOVS     r2,#0
-00000c  461d              MOV      r5,r3
-00000e  4611              MOV      r1,r2
-000010  4638              MOV      r0,r7
-000012  f7fffffe          BL       ADC_Open
-;;;186    
-;;;187        /* To sample band-gap precisely, the ADC capacitor must be charged at least 3 us for charging the ADC capacitor ( Cin )*/
-;;;188        /* Sampling time = extended sampling time + 1 */
-;;;189        /* 1/24000000 * (Sampling time) = 3 us */
-;;;190    	/*
-;;;191    	    printf("+----------------------------------------------------------------------+\n");
-;;;192    	    printf("|   ADC clock source -> PCLK1  = 48 MHz                                |\n");
-;;;193    	    printf("|   ADC clock divider          = 2                                     |\n");
-;;;194    	    printf("|   ADC clock                  = 48 MHz / 2 = 24 MHz                   |\n");
-;;;195    	    printf("|   ADC extended sampling time = 71                                    |\n");
-;;;196    	    printf("|   ADC conversion time = 17 + ADC extended sampling time = 88         |\n");
-;;;197    	    printf("|   ADC conversion rate = 24 MHz / 88 = 272.7 ksps                     |\n");
-;;;198    	    printf("+----------------------------------------------------------------------+\n");
-;;;199    	*/
-;;;200    
-;;;201        /* Set extend sampling time based on external resistor value.*/
-;;;202        ADC_SetExtendSampleTime(ADC,(uint32_t) NULL, ADCextendSampling);
-000016  2200              MOVS     r2,#0
+;;;181    //	ADC_ReadAVdd();
+;;;182    
+;;;183        /* Enable ADC converter */
+;;;184    //    ADC_POWER_ON(ADC);
+;;;185    
+;;;186        /*Wait for ADC internal power ready*/
+;;;187    //    CLK_SysTickDelay(10000);
+;;;188    
+;;;189        /* Set input mode as single-end, and Single mode*/
+;;;190        ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE,(uint32_t) 0x1 << ch);
+00000c  2601              MOVS     r6,#1
+00000e  4633              MOV      r3,r6
+000010  4083              LSLS     r3,r3,r0
+000012  4f11              LDR      r7,|L2.88|
+000014  2200              MOVS     r2,#0
+000016  461d              MOV      r5,r3
 000018  4611              MOV      r1,r2
 00001a  4638              MOV      r0,r7
-00001c  f7fffffe          BL       ADC_SetExtendSampleTime
-;;;203    
-;;;204        /* Select ADC input channel */
-;;;205        ADC_SET_INPUT_CHANNEL(ADC, 0x1 << ch);
-000020  4c08              LDR      r4,|L2.68|
-000022  3480              ADDS     r4,r4,#0x80
-000024  6860              LDR      r0,[r4,#4]
-000026  6065              STR      r5,[r4,#4]
-;;;206    
-;;;207    	ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
-000028  6126              STR      r6,[r4,#0x10]
-;;;208    	ADC_ENABLE_INT(ADC, ADC_ADF_INT);
-00002a  2101              MOVS     r1,#1
-00002c  4638              MOV      r0,r7
-00002e  f7fffffe          BL       ADC_EnableInt
-000032  4905              LDR      r1,|L2.72|
-000034  05a0              LSLS     r0,r4,#22
-000036  6008              STR      r0,[r1,#0]
-;;;209    	NVIC_EnableIRQ(ADC_IRQn);
-;;;210    
-;;;211        /* Start ADC conversion */
-;;;212        ADC_START_CONV(ADC);
-000038  6820              LDR      r0,[r4,#0]
-00003a  14e1              ASRS     r1,r4,#19
-00003c  4308              ORRS     r0,r0,r1
-00003e  6020              STR      r0,[r4,#0]
-;;;213    	
-;;;214    }
-000040  bdf8              POP      {r3-r7,pc}
+00001c  f7fffffe          BL       ADC_Open
+;;;191    
+;;;192        /* To sample band-gap precisely, the ADC capacitor must be charged at least 3 us for charging the ADC capacitor ( Cin )*/
+;;;193        /* Sampling time = extended sampling time + 1 */
+;;;194        /* 1/24000000 * (Sampling time) = 3 us */
+;;;195    	/*
+;;;196    	    printf("+----------------------------------------------------------------------+\n");
+;;;197    	    printf("|   ADC clock source -> PCLK1  = 48 MHz                                |\n");
+;;;198    	    printf("|   ADC clock divider          = 2                                     |\n");
+;;;199    	    printf("|   ADC clock                  = 48 MHz / 2 = 24 MHz                   |\n");
+;;;200    	    printf("|   ADC extended sampling time = 71                                    |\n");
+;;;201    	    printf("|   ADC conversion time = 17 + ADC extended sampling time = 88         |\n");
+;;;202    	    printf("|   ADC conversion rate = 24 MHz / 88 = 272.7 ksps                     |\n");
+;;;203    	    printf("+----------------------------------------------------------------------+\n");
+;;;204    	*/
+;;;205    
+;;;206        /* Set extend sampling time based on external resistor value.*/
+;;;207        ADC_SetExtendSampleTime(ADC,(uint32_t) NULL, ADCextendSampling);
+000020  220a              MOVS     r2,#0xa
+000022  2100              MOVS     r1,#0
+000024  4638              MOV      r0,r7
+000026  f7fffffe          BL       ADC_SetExtendSampleTime
+;;;208    
+;;;209        /* Select ADC input channel */
+;;;210        ADC_SET_INPUT_CHANNEL(ADC, 0x1 << ch);
+00002a  4c0b              LDR      r4,|L2.88|
+00002c  3480              ADDS     r4,r4,#0x80
+00002e  6860              LDR      r0,[r4,#4]
+000030  6065              STR      r5,[r4,#4]
+;;;211    
+;;;212    	ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+000032  6126              STR      r6,[r4,#0x10]
+;;;213    	ADC_ENABLE_INT(ADC, ADC_ADF_INT);
+000034  2101              MOVS     r1,#1
+000036  4638              MOV      r0,r7
+000038  f7fffffe          BL       ADC_EnableInt
+00003c  4907              LDR      r1,|L2.92|
+00003e  05a0              LSLS     r0,r4,#22
+000040  6008              STR      r0,[r1,#0]
+;;;214    	NVIC_EnableIRQ(ADC_IRQn);
 ;;;215    
+;;;216        /* Start ADC conversion */
+;;;217        ADC_START_CONV(ADC);
+000042  6820              LDR      r0,[r4,#0]
+000044  14e1              ASRS     r1,r4,#19
+000046  4308              ORRS     r0,r0,r1
+000048  6020              STR      r0,[r4,#0]
+;;;218    	
+;;;219    	MONITOR_PIN = 0;
+00004a  4905              LDR      r1,|L2.96|
+00004c  2000              MOVS     r0,#0
+00004e  63c8              STR      r0,[r1,#0x3c]
+;;;220    }
+000050  bdf8              POP      {r3-r7,pc}
+;;;221    
                           ENDP
 
-000042  0000              DCW      0x0000
-                  |L2.68|
+000052  0000              DCW      0x0000
+                  |L2.84|
+                          DCD      ||.data||
+                  |L2.88|
                           DCD      0x40043000
-                  |L2.72|
+                  |L2.92|
                           DCD      0xe000e100
+                  |L2.96|
+                          DCD      0x40004840
+
+                          AREA ||i.ADC_Process||, CODE, READONLY, ALIGN=2
+
+                          REQUIRE _printf_pre_padding
+                          REQUIRE _printf_percent
+                          REQUIRE _printf_widthprec
+                          REQUIRE _printf_d
+                          REQUIRE _printf_x
+                          REQUIRE _printf_int_dec
+                          REQUIRE _printf_longlong_hex
+                  ADC_Process PROC
+;;;222    
+;;;223    void ADC_Process(uint8_t state)
+000000  b5f8              PUSH     {r3-r7,lr}
+;;;224    {
+;;;225    	uint8_t idx = 0;
+000002  2400              MOVS     r4,#0
+;;;226    	volatile	uint32_t sum = 0;
+;;;227    	uint16_t tmp = 0;
+;;;228    	
+;;;229    	switch(state)
+;;;230    	{
+;;;231    		case State_avergage:	
+;;;232    			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+;;;233    			{
+;;;234    				ADC_TargetChannel = adc_measure[idx].adc_ch;
+000004  4e31              LDR      r6,|L3.204|
+000006  4627              MOV      r7,r4                 ;226
+000008  9400              STR      r4,[sp,#0]            ;229
+00000a  2800              CMP      r0,#0                 ;229
+00000c  d002              BEQ      |L3.20|
+00000e  2801              CMP      r0,#1                 ;229
+000010  d122              BNE      |L3.88|
+000012  e022              B        |L3.90|
+                  |L3.20|
+000014  482e              LDR      r0,|L3.208|
+000016  5d00              LDRB     r0,[r0,r4]
+000018  8030              STRH     r0,[r6,#0]
+;;;235    				for ( tmp = 0 ; tmp < ADC_AVG_TRAGET ; tmp++)
+00001a  2500              MOVS     r5,#0
+                  |L3.28|
+;;;236    				{
+;;;237    					ADC_InitChannel(ADC_TargetChannel);
+00001c  8830              LDRH     r0,[r6,#0]  ; ADC_TargetChannel
+00001e  b2c0              UXTB     r0,r0
+000020  f7fffffe          BL       ADC_InitChannel
+                  |L3.36|
+;;;238    					while(!is_flag_set(flag_ADC_Data_Ready));
+000024  68f0              LDR      r0,[r6,#0xc]  ; BitFlag
+000026  07c0              LSLS     r0,r0,#31
+000028  d0fc              BEQ      |L3.36|
+;;;239    					MONITOR_PIN = 0;
+00002a  482a              LDR      r0,|L3.212|
+00002c  63c7              STR      r7,[r0,#0x3c]
+;;;240    					ADC_DISABLE_INT(ADC, ADC_ADF_INT);
+00002e  2101              MOVS     r1,#1
+000030  4829              LDR      r0,|L3.216|
+000032  f7fffffe          BL       ADC_DisableInt
+;;;241    
+;;;242    					sum += ADC_Datax;											//sum the first 8 ADC data
+000036  8871              LDRH     r1,[r6,#2]  ; ADC_Datax
+000038  9800              LDR      r0,[sp,#0]
+00003a  1c6d              ADDS     r5,r5,#1
+00003c  1840              ADDS     r0,r0,r1
+00003e  b2ad              UXTH     r5,r5                 ;235
+000040  9000              STR      r0,[sp,#0]            ;235
+000042  2d08              CMP      r5,#8                 ;235
+000044  d3ea              BCC      |L3.28|
+;;;243    				}
+;;;244    				ADC_DataArray[idx] = (uint16_t) (sum >> ADC_AVG_POW);			//do average
+000046  0340              LSLS     r0,r0,#13
+000048  0062              LSLS     r2,r4,#1
+00004a  0c01              LSRS     r1,r0,#16
+00004c  4823              LDR      r0,|L3.220|
+00004e  1c64              ADDS     r4,r4,#1
+000050  b2e4              UXTB     r4,r4                 ;232
+000052  5281              STRH     r1,[r0,r2]
+000054  2c07              CMP      r4,#7                 ;232
+000056  d3dd              BCC      |L3.20|
+                  |L3.88|
+;;;245    			}
+;;;246    
+;;;247    			break;
+;;;248    
+;;;249    		case State_moving:
+;;;250    			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+;;;251    			{
+;;;252    				ADC_TargetChannel = adc_measure[idx].adc_ch;
+;;;253    				ADC_InitChannel(ADC_TargetChannel);
+;;;254    				while(!is_flag_set(flag_ADC_Data_Ready));
+;;;255    				MONITOR_PIN = 0;
+;;;256    				ADC_DISABLE_INT(ADC, ADC_ADF_INT);
+;;;257    
+;;;258    				sum = ADC_DataArray[idx] << ADC_AVG_POW;					//extend the original average data
+;;;259    				sum -= ADC_DataArray[idx];									//subtract the old average data
+;;;260    				sum += ADC_Datax;												//add the new adc data
+;;;261    				ADC_DataArray[idx] = (uint16_t) (sum >> ADC_AVG_POW);		//do average again
+;;;262    			}
+;;;263    
+;;;264    			#if 1	// debug
+;;;265    			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+;;;266    			{
+;;;267    				tmp = ADC_DataArray[idx];
+;;;268    //				convertDecToBin(tmp);//ADC_DataArray[idx]
+;;;269    //				printf("%d:%4dmv," , idx ,ADC_CALC_DATA_TO_VOLTAGE(ADC_DataArray[idx],ADC_REF_VOLTAGE));
+;;;270    //				printf("%d:%3X,%4d ," , idx ,ADC_DataArray[idx],ADC_CALC_DATA_TO_VOLTAGE(ADC_DataArray[idx],ADC_REF_VOLTAGE));
+;;;271    //				printf("%d:0x%3X," , 4 , ADC_DataArray[idx]);
+;;;272    				printf("%3X:%4d ," , tmp ,ADC_CALC_DATA_TO_VOLTAGE(tmp,ADC_REF_VOLTAGE));
+;;;273    //				printf("%2X:%2X ," , adc_measure[idx].adc_ch,ADC_DataArray[idx]);
+;;;274    				
+;;;275    				if (idx == (ADC_CH_NUM -1) )
+;;;276    				{
+;;;277    					printf("\r\n");
+;;;278    				}				
+;;;279    			}
+;;;280    			#endif	
+;;;281    			
+;;;282    			break;
+;;;283    		
+;;;284    		
+;;;285    	}
+;;;286    	
+;;;287    }
+000058  bdf8              POP      {r3-r7,pc}
+                  |L3.90|
+00005a  481d              LDR      r0,|L3.208|
+00005c  5d00              LDRB     r0,[r0,r4]            ;252
+00005e  8030              STRH     r0,[r6,#0]            ;252
+000060  8830              LDRH     r0,[r6,#0]            ;253  ; ADC_TargetChannel
+000062  b2c0              UXTB     r0,r0                 ;253
+000064  f7fffffe          BL       ADC_InitChannel
+                  |L3.104|
+000068  68f0              LDR      r0,[r6,#0xc]          ;254  ; BitFlag
+00006a  07c0              LSLS     r0,r0,#31             ;254
+00006c  d0fc              BEQ      |L3.104|
+00006e  4819              LDR      r0,|L3.212|
+000070  63c7              STR      r7,[r0,#0x3c]         ;255
+000072  2101              MOVS     r1,#1                 ;256
+000074  4818              LDR      r0,|L3.216|
+000076  f7fffffe          BL       ADC_DisableInt
+00007a  4d18              LDR      r5,|L3.220|
+00007c  0061              LSLS     r1,r4,#1              ;258
+00007e  5a68              LDRH     r0,[r5,r1]            ;258
+000080  00c2              LSLS     r2,r0,#3              ;258
+000082  1a10              SUBS     r0,r2,r0              ;259
+000084  9000              STR      r0,[sp,#0]            ;260
+000086  8872              LDRH     r2,[r6,#2]            ;260  ; ADC_Datax
+000088  1c64              ADDS     r4,r4,#1              ;261
+00008a  1880              ADDS     r0,r0,r2              ;260
+00008c  9000              STR      r0,[sp,#0]            ;261
+00008e  0340              LSLS     r0,r0,#13             ;261
+000090  0c00              LSRS     r0,r0,#16             ;261
+000092  b2e4              UXTB     r4,r4                 ;250
+000094  5268              STRH     r0,[r5,r1]            ;261
+000096  2c07              CMP      r4,#7                 ;250
+000098  d3df              BCC      |L3.90|
+00009a  4f11              LDR      r7,|L3.224|
+00009c  2400              MOVS     r4,#0                 ;265
+                  |L3.158|
+00009e  0060              LSLS     r0,r4,#1              ;267
+0000a0  5a2e              LDRH     r6,[r5,r0]            ;267
+0000a2  4810              LDR      r0,|L3.228|
+0000a4  4639              MOV      r1,r7                 ;272
+0000a6  4370              MULS     r0,r6,r0              ;272
+0000a8  f7fffffe          BL       __aeabi_uidivmod
+0000ac  4602              MOV      r2,r0                 ;272
+0000ae  4631              MOV      r1,r6                 ;272
+0000b0  a00d              ADR      r0,|L3.232|
+0000b2  f7fffffe          BL       __2printf
+0000b6  2c06              CMP      r4,#6                 ;275
+0000b8  d102              BNE      |L3.192|
+0000ba  a00e              ADR      r0,|L3.244|
+0000bc  f7fffffe          BL       __2printf
+                  |L3.192|
+0000c0  1c64              ADDS     r4,r4,#1              ;277
+0000c2  b2e4              UXTB     r4,r4                 ;265
+0000c4  2c07              CMP      r4,#7                 ;265
+0000c6  d3ea              BCC      |L3.158|
+0000c8  bdf8              POP      {r3-r7,pc}
+;;;288    
+                          ENDP
+
+0000ca  0000              DCW      0x0000
+                  |L3.204|
+                          DCD      ||.data||
+                  |L3.208|
+                          DCD      ||.constdata||
+                  |L3.212|
+                          DCD      0x40004840
+                  |L3.216|
+                          DCD      0x40043000
+                  |L3.220|
+                          DCD      ||.bss||
+                  |L3.224|
+                          DCD      0x00000fff
+                  |L3.228|
+                          DCD      0x00000ce4
+                  |L3.232|
+0000e8  2533583a          DCB      "%3X:%4d ,",0
+0000ec  25346420
+0000f0  2c00    
+0000f2  00                DCB      0
+0000f3  00                DCB      0
+                  |L3.244|
+0000f4  0d0a00            DCB      "\r\n",0
+0000f7  00                DCB      0
 
                           AREA ||i.ADC_ReadAVdd||, CODE, READONLY, ALIGN=2
 
                   ADC_ReadAVdd PROC
-;;;142    
-;;;143    void ADC_ReadAVdd(void)
+;;;145    
+;;;146    void ADC_ReadAVdd(void)
 000000  b5f8              PUSH     {r3-r7,lr}
-;;;144    {
-;;;145        int32_t  i32ConversionData;
-;;;146        int32_t  i32BuiltInData;
-;;;147    
-;;;148        ADC_POWER_ON(ADC);
-000002  4d22              LDR      r5,|L3.140|
+;;;147    {
+;;;148        int32_t  i32ConversionData;
+;;;149        int32_t  i32BuiltInData;
+;;;150    
+;;;151        ADC_POWER_ON(ADC);
+000002  4d22              LDR      r5,|L4.140|
 000004  6828              LDR      r0,[r5,#0]
 000006  2601              MOVS     r6,#1
 000008  4330              ORRS     r0,r0,r6
 00000a  6028              STR      r0,[r5,#0]
-;;;149        CLK_SysTickDelay(10000);
-00000c  4820              LDR      r0,|L3.144|
+;;;152        CLK_SysTickDelay(10000);
+00000c  4820              LDR      r0,|L4.144|
 00000e  f7fffffe          BL       CLK_SysTickDelay
-;;;150    
-;;;151    	
-;;;152        ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE, BIT29);
-000012  4f1e              LDR      r7,|L3.140|
+;;;153    
+;;;154    	
+;;;155        ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE, BIT29);
+000012  4f1e              LDR      r7,|L4.140|
 000014  05ac              LSLS     r4,r5,#22
 000016  2200              MOVS     r2,#0
 000018  3f80              SUBS     r7,r7,#0x80
@@ -182,54 +376,54 @@
 00001c  4611              MOV      r1,r2
 00001e  4638              MOV      r0,r7
 000020  f7fffffe          BL       ADC_Open
-;;;153        ADC_SetExtendSampleTime(ADC, 0, 71);
+;;;156        ADC_SetExtendSampleTime(ADC, 0, 71);
 000024  2247              MOVS     r2,#0x47
 000026  2100              MOVS     r1,#0
 000028  4638              MOV      r0,r7
 00002a  f7fffffe          BL       ADC_SetExtendSampleTime
-;;;154        ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
+;;;157        ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT);
 00002e  612e              STR      r6,[r5,#0x10]
-;;;155        ADC_ENABLE_INT(ADC, ADC_ADF_INT);
+;;;158        ADC_ENABLE_INT(ADC, ADC_ADF_INT);
 000030  2101              MOVS     r1,#1
 000032  4638              MOV      r0,r7
 000034  f7fffffe          BL       ADC_EnableInt
-000038  4816              LDR      r0,|L3.148|
+000038  4816              LDR      r0,|L4.148|
 00003a  6004              STR      r4,[r0,#0]
-;;;156        NVIC_EnableIRQ(ADC_IRQn);
-;;;157        ADC_START_CONV(ADC);
+;;;159        NVIC_EnableIRQ(ADC_IRQn);
+;;;160        ADC_START_CONV(ADC);
 00003c  6828              LDR      r0,[r5,#0]
 00003e  14a1              ASRS     r1,r4,#18
 000040  4308              ORRS     r0,r0,r1
 000042  6028              STR      r0,[r5,#0]
-;;;158    
-;;;159        ADC_DISABLE_INT(ADC, ADC_ADF_INT);
+;;;161    
+;;;162        ADC_DISABLE_INT(ADC, ADC_ADF_INT);
 000044  2101              MOVS     r1,#1
 000046  4638              MOV      r0,r7
 000048  f7fffffe          BL       ADC_DisableInt
-;;;160    		
-;;;161        i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, 29);
-00004c  480f              LDR      r0,|L3.140|
+;;;163    		
+;;;164        i32ConversionData = ADC_GET_CONVERSION_DATA(ADC, 29);
+00004c  480f              LDR      r0,|L4.140|
 00004e  3840              SUBS     r0,r0,#0x40
 000050  6b40              LDR      r0,[r0,#0x34]
 000052  b285              UXTH     r5,r0
-;;;162        SYS_UnlockReg();
+;;;165        SYS_UnlockReg();
 000054  f7fffffe          BL       SYS_UnlockReg
-;;;163        FMC_Open();
+;;;166        FMC_Open();
 000058  f7fffffe          BL       FMC_Open
-00005c  480e              LDR      r0,|L3.152|
+00005c  480e              LDR      r0,|L4.152|
 00005e  2104              MOVS     r1,#4
 000060  60c1              STR      r1,[r0,#0xc]
 000062  2170              MOVS     r1,#0x70
 000064  6041              STR      r1,[r0,#4]
 000066  6106              STR      r6,[r0,#0x10]
-                  |L3.104|
+                  |L4.104|
 000068  6902              LDR      r2,[r0,#0x10]
 00006a  07d1              LSLS     r1,r2,#31
-00006c  d1fc              BNE      |L3.104|
+00006c  d1fc              BNE      |L4.104|
 00006e  6880              LDR      r0,[r0,#8]
-;;;164        i32BuiltInData = FMC_ReadBandGap();	
-;;;165    
-;;;166    	AVdd = 3072*i32BuiltInData/i32ConversionData;
+;;;167        i32BuiltInData = FMC_ReadBandGap();	
+;;;168    
+;;;169    	AVdd = 3072*i32BuiltInData/i32ConversionData;
 000070  2103              MOVS     r1,#3
 000072  0500              LSLS     r0,r0,#20
 000074  0d00              LSRS     r0,r0,#20
@@ -237,30 +431,30 @@
 000078  4348              MULS     r0,r1,r0
 00007a  4629              MOV      r1,r5
 00007c  f7fffffe          BL       __aeabi_idivmod
-000080  4906              LDR      r1,|L3.156|
+000080  4906              LDR      r1,|L4.156|
 000082  6088              STR      r0,[r1,#8]  ; AVdd
-000084  4803              LDR      r0,|L3.148|
+000084  4803              LDR      r0,|L4.148|
 000086  3080              ADDS     r0,r0,#0x80
 000088  6004              STR      r4,[r0,#0]
-;;;167    
-;;;168    //	printf("%s : %d,%d,%d\r\n",__FUNCTION__,AVdd, i32ConversionData,i32BuiltInData);
-;;;169    
-;;;170        NVIC_DisableIRQ(ADC_IRQn);
-;;;171    	
-;;;172    }
+;;;170    
+;;;171    //	printf("%s : %d,%d,%d\r\n",__FUNCTION__,AVdd, i32ConversionData,i32BuiltInData);
+;;;172    
+;;;173        NVIC_DisableIRQ(ADC_IRQn);
+;;;174    	
+;;;175    }
 00008a  bdf8              POP      {r3-r7,pc}
-;;;173    
+;;;176    
                           ENDP
 
-                  |L3.140|
+                  |L4.140|
                           DCD      0x40043080
-                  |L3.144|
+                  |L4.144|
                           DCD      0x00002710
-                  |L3.148|
+                  |L4.148|
                           DCD      0xe000e100
-                  |L3.152|
+                  |L4.152|
                           DCD      0x4000c000
-                  |L3.156|
+                  |L4.156|
                           DCD      ||.data||
 
                           AREA ||i.CLK_SysTickDelay||, CODE, READONLY, ALIGN=2
@@ -268,12 +462,12 @@
                   CLK_SysTickDelay PROC
 ;;;503      */
 ;;;504    __STATIC_INLINE void CLK_SysTickDelay(uint32_t us)
-000000  4906              LDR      r1,|L4.28|
+000000  4906              LDR      r1,|L5.28|
 ;;;505    {
 ;;;506        SysTick->LOAD = us * CyclesPerUs;
 000002  6809              LDR      r1,[r1,#0]  ; CyclesPerUs
 000004  4348              MULS     r0,r1,r0
-000006  4906              LDR      r1,|L4.32|
+000006  4906              LDR      r1,|L5.32|
 000008  6148              STR      r0,[r1,#0x14]
 ;;;507        SysTick->VAL  = (0x00);
 00000a  2200              MOVS     r2,#0
@@ -281,13 +475,13 @@
 ;;;508        SysTick->CTRL = SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk;
 00000e  2005              MOVS     r0,#5
 000010  6108              STR      r0,[r1,#0x10]
-                  |L4.18|
+                  |L5.18|
 ;;;509    
 ;;;510        /* Waiting for down-count to zero */
 ;;;511        while ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == 0);
 000012  6908              LDR      r0,[r1,#0x10]
 000014  03c0              LSLS     r0,r0,#15
-000016  d5fc              BPL      |L4.18|
+000016  d5fc              BPL      |L5.18|
 ;;;512    
 ;;;513        /* Disable SysTick counter */
 ;;;514        SysTick->CTRL = 0;
@@ -297,101 +491,108 @@
 ;;;516    
                           ENDP
 
-                  |L4.28|
+                  |L5.28|
                           DCD      CyclesPerUs
-                  |L4.32|
+                  |L5.32|
                           DCD      0xe000e000
 
                           AREA ||i.GPIO_Init||, CODE, READONLY, ALIGN=2
 
                   GPIO_Init PROC
-;;;215    
-;;;216    void GPIO_Init (void)
+;;;289    
+;;;290    void GPIO_Init (void)
 000000  b510              PUSH     {r4,lr}
-;;;217    {
-;;;218        GPIO_SetMode(PB, BIT14, GPIO_MODE_OUTPUT);
-000002  2201              MOVS     r2,#1
-000004  0391              LSLS     r1,r2,#14
-000006  4802              LDR      r0,|L5.16|
-000008  f7fffffe          BL       GPIO_SetMode
-;;;219    }
-00000c  bd10              POP      {r4,pc}
-;;;220    
+;;;291    {
+;;;292        GPIO_SetMode(PB, BIT14, GPIO_MODE_OUTPUT);
+000002  4c06              LDR      r4,|L6.28|
+000004  2201              MOVS     r2,#1
+000006  0391              LSLS     r1,r2,#14
+000008  4620              MOV      r0,r4
+00000a  f7fffffe          BL       GPIO_SetMode
+;;;293    
+;;;294        GPIO_SetMode(PB, BIT15, GPIO_MODE_OUTPUT);	
+00000e  2201              MOVS     r2,#1
+000010  03d1              LSLS     r1,r2,#15
+000012  4620              MOV      r0,r4
+000014  f7fffffe          BL       GPIO_SetMode
+;;;295    }
+000018  bd10              POP      {r4,pc}
+;;;296    
                           ENDP
 
-00000e  0000              DCW      0x0000
-                  |L5.16|
+00001a  0000              DCW      0x0000
+                  |L6.28|
                           DCD      0x40004040
 
                           AREA ||i.SYS_Init||, CODE, READONLY, ALIGN=2
 
                   SYS_Init PROC
-;;;279    
-;;;280    void SYS_Init(void)
+;;;342    
+;;;343    void SYS_Init(void)
 000000  b570              PUSH     {r4-r6,lr}
-;;;281    {
-;;;282        /* Unlock protected registers */
-;;;283        SYS_UnlockReg();
+;;;344    {
+;;;345        /* Unlock protected registers */
+;;;346        SYS_UnlockReg();
 000002  f7fffffe          BL       SYS_UnlockReg
-;;;284    
-;;;285        /* Enable HIRC clock (Internal RC 48MHz) */
-;;;286        CLK_EnableXtalRC(CLK_PWRCTL_HIRCEN_Msk);
+;;;347    
+;;;348        /* Enable HIRC clock (Internal RC 48MHz) */
+;;;349        CLK_EnableXtalRC(CLK_PWRCTL_HIRCEN_Msk);
 000006  2004              MOVS     r0,#4
 000008  f7fffffe          BL       CLK_EnableXtalRC
-;;;287    //    CLK_EnableXtalRC(CLK_PWRCTL_HXTEN_Msk);
-;;;288    	
-;;;289        /* Wait for HIRC clock ready */
-;;;290        CLK_WaitClockReady(CLK_STATUS_HIRCSTB_Msk);
+;;;350    //    CLK_EnableXtalRC(CLK_PWRCTL_HXTEN_Msk);
+;;;351    	
+;;;352        /* Wait for HIRC clock ready */
+;;;353        CLK_WaitClockReady(CLK_STATUS_HIRCSTB_Msk);
 00000c  2010              MOVS     r0,#0x10
 00000e  f7fffffe          BL       CLK_WaitClockReady
-;;;291    //    CLK_WaitClockReady(CLK_STATUS_HXTSTB_Msk);
-;;;292    	
-;;;293        /* Select HCLK clock source as HIRC and HCLK source divider as 1 */
-;;;294        CLK_SetHCLK(CLK_CLKSEL0_HCLKSEL_HIRC, CLK_CLKDIV0_HCLK(1));
+;;;354    //    CLK_WaitClockReady(CLK_STATUS_HXTSTB_Msk);
+;;;355    	
+;;;356        /* Select HCLK clock source as HIRC and HCLK source divider as 1 */
+;;;357        CLK_SetHCLK(CLK_CLKSEL0_HCLKSEL_HIRC, CLK_CLKDIV0_HCLK(1));
 000012  2100              MOVS     r1,#0
 000014  2007              MOVS     r0,#7
 000016  f7fffffe          BL       CLK_SetHCLK
-;;;295    
-;;;296        /* Enable UART0 clock */
-;;;297        CLK_EnableModuleClock(UART0_MODULE);
-00001a  4c22              LDR      r4,|L6.164|
+;;;358    
+;;;359        /* Enable UART0 clock */
+;;;360        CLK_EnableModuleClock(UART0_MODULE);
+00001a  4c25              LDR      r4,|L7.176|
 00001c  4620              MOV      r0,r4
 00001e  f7fffffe          BL       CLK_EnableModuleClock
-;;;298        CLK_SetModuleClock(UART0_MODULE, CLK_CLKSEL1_UART0SEL_PCLK0, CLK_CLKDIV0_UART0(1));
+;;;361        CLK_SetModuleClock(UART0_MODULE, CLK_CLKSEL1_UART0SEL_PCLK0, CLK_CLKDIV0_UART0(1));
 000022  2101              MOVS     r1,#1
 000024  2200              MOVS     r2,#0
 000026  0689              LSLS     r1,r1,#26
 000028  4620              MOV      r0,r4
 00002a  f7fffffe          BL       CLK_SetModuleClock
-;;;299    	
-;;;300        CLK_EnableModuleClock(TMR3_MODULE);
-00002e  4d1e              LDR      r5,|L6.168|
+;;;362    	
+;;;363        CLK_EnableModuleClock(TMR3_MODULE);
+00002e  4d21              LDR      r5,|L7.180|
 000030  4628              MOV      r0,r5
 000032  f7fffffe          BL       CLK_EnableModuleClock
-;;;301        CLK_SetModuleClock(TMR3_MODULE, CLK_CLKSEL1_TMR3SEL_PCLK1, 0);
+;;;364        CLK_SetModuleClock(TMR3_MODULE, CLK_CLKSEL1_TMR3SEL_PCLK1, 0);
 000036  2401              MOVS     r4,#1
 000038  0564              LSLS     r4,r4,#21
 00003a  2200              MOVS     r2,#0
 00003c  4621              MOV      r1,r4
 00003e  4628              MOV      r0,r5
 000040  f7fffffe          BL       CLK_SetModuleClock
-;;;302    	
-;;;303        CLK_EnableModuleClock(ADC_MODULE);	
-000044  4d19              LDR      r5,|L6.172|
+;;;365    	
+;;;366        CLK_EnableModuleClock(ADC_MODULE);	
+000044  4d1c              LDR      r5,|L7.184|
 000046  4628              MOV      r0,r5
 000048  f7fffffe          BL       CLK_EnableModuleClock
-;;;304        CLK_SetModuleClock(ADC_MODULE, CLK_CLKSEL2_ADCSEL_PCLK1, CLK_CLKDIV0_ADC(2));
-00004c  1162              ASRS     r2,r4,#5
+;;;367        CLK_SetModuleClock(ADC_MODULE, CLK_CLKSEL2_ADCSEL_PCLK1, CLK_CLKDIV0_ADC(3));
+00004c  1122              ASRS     r2,r4,#4
 00004e  4621              MOV      r1,r4
 000050  4628              MOV      r0,r5
 000052  f7fffffe          BL       CLK_SetModuleClock
-;;;305    
-;;;306        /* Update System Core Clock */
-;;;307        SystemCoreClockUpdate();
+;;;368    
+;;;369        /* Update System Core Clock */
+;;;370        SystemCoreClockUpdate();
 000056  f7fffffe          BL       SystemCoreClockUpdate
-;;;308    
-;;;309        /* Set PB multi-function pins for UART0 RXD=PB.12 and TXD=PB.13 */
-;;;310        SYS->GPB_MFPH = (SYS->GPB_MFPH & ~(SYS_GPB_MFPH_PB12MFP_Msk | SYS_GPB_MFPH_PB13MFP_Msk))    |       \
+;;;371    
+;;;372        /* Set PB multi-function pins for UART0 RXD=PB.12 and TXD=PB.13 */
+;;;373        SYS->GPB_MFPH = (SYS->GPB_MFPH & ~(SYS_GPB_MFPH_PB12MFP_Msk | SYS_GPB_MFPH_PB13MFP_Msk))    |       \
 00005a  0260              LSLS     r0,r4,#9
 00005c  6bc1              LDR      r1,[r0,#0x3c]
 00005e  22ff              MOVS     r2,#0xff
@@ -401,70 +602,76 @@
 000066  0452              LSLS     r2,r2,#17
 000068  1889              ADDS     r1,r1,r2
 00006a  63c1              STR      r1,[r0,#0x3c]
-;;;311                        (SYS_GPB_MFPH_PB12MFP_UART0_RXD | SYS_GPB_MFPH_PB13MFP_UART0_TXD);
-;;;312    
-;;;313        SYS->GPB_MFPH = (SYS->GPB_MFPH &~( SYS_GPB_MFPH_PB10MFP_Msk )) \
-00006c  6bc1              LDR      r1,[r0,#0x3c]
+;;;374                        (SYS_GPB_MFPH_PB12MFP_UART0_RXD | SYS_GPB_MFPH_PB13MFP_UART0_TXD);
+;;;375    
+;;;376        SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB6MFP_Msk )) \
+00006c  6b81              LDR      r1,[r0,#0x38]
 00006e  220f              MOVS     r2,#0xf
-000070  0212              LSLS     r2,r2,#8
+000070  0612              LSLS     r2,r2,#24
 000072  4391              BICS     r1,r1,r2
-000074  31ff              ADDS     r1,r1,#0xff
-000076  3101              ADDS     r1,#1
-000078  63c1              STR      r1,[r0,#0x3c]
-;;;314                        | ( SYS_GPB_MFPH_PB10MFP_ADC0_CH10) ;
-;;;315    
-;;;316        SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB0MFP_Msk | SYS_GPB_MFPL_PB4MFP_Msk| SYS_GPB_MFPL_PB7MFP_Msk)) \
+000074  1182              ASRS     r2,r0,#6
+000076  1889              ADDS     r1,r1,r2
+000078  6381              STR      r1,[r0,#0x38]
+;;;377                        | (SYS_GPB_MFPL_PB6MFP_ADC0_CH6 ) ;
+;;;378    
+;;;379        SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB5MFP_Msk | SYS_GPB_MFPL_PB4MFP_Msk| SYS_GPB_MFPL_PB3MFP_Msk)) \
 00007a  6b81              LDR      r1,[r0,#0x38]
-00007c  4a0c              LDR      r2,|L6.176|
+00007c  4a0f              LDR      r2,|L7.188|
 00007e  4011              ANDS     r1,r1,r2
-000080  4a0c              LDR      r2,|L6.180|
+000080  4a0f              LDR      r2,|L7.192|
 000082  1889              ADDS     r1,r1,r2
 000084  6381              STR      r1,[r0,#0x38]
-;;;317                        | (SYS_GPB_MFPL_PB0MFP_ADC0_CH0 | SYS_GPB_MFPL_PB4MFP_ADC0_CH4| SYS_GPB_MFPL_PB7MFP_ADC0_CH7) ;
-;;;318    
-;;;319        /* Set PB.0 ~ PB.3 to input mode */
-;;;320        GPIO_SetMode(PB, BIT0|BIT4|BIT7|BIT10, GPIO_MODE_INPUT);
-000086  4c0d              LDR      r4,|L6.188|
-000088  2200              MOVS     r2,#0
-00008a  490b              LDR      r1,|L6.184|
-00008c  4620              MOV      r0,r4
-00008e  f7fffffe          BL       GPIO_SetMode
-;;;321    
-;;;322        /* Disable the PB0 ~ PB3 digital input path to avoid the leakage current. */
-;;;323        GPIO_DISABLE_DIGITAL_PATH(PB, BIT0|BIT4|BIT7|BIT10);
-000092  6861              LDR      r1,[r4,#4]
-000094  4a0a              LDR      r2,|L6.192|
-000096  4311              ORRS     r1,r1,r2
-000098  6061              STR      r1,[r4,#4]
-00009a  490a              LDR      r1,|L6.196|
-00009c  2000              MOVS     r0,#0
-00009e  6008              STR      r0,[r1,#0]
-;;;324    
-;;;325        /* Lock protected registers */
-;;;326        SYS_LockReg();
-;;;327    }
-0000a0  bd70              POP      {r4-r6,pc}
-;;;328    
+;;;380                        | (SYS_GPB_MFPL_PB5MFP_ADC0_CH5 | SYS_GPB_MFPL_PB4MFP_ADC0_CH4| SYS_GPB_MFPL_PB3MFP_ADC0_CH3) ;
+;;;381    
+;;;382        SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB2MFP_Msk | SYS_GPB_MFPL_PB1MFP_Msk| SYS_GPB_MFPL_PB0MFP_Msk)) \
+000086  6b81              LDR      r1,[r0,#0x38]
+000088  0b09              LSRS     r1,r1,#12
+00008a  0309              LSLS     r1,r1,#12
+00008c  31ff              ADDS     r1,r1,#0xff
+00008e  3112              ADDS     r1,r1,#0x12
+000090  6381              STR      r1,[r0,#0x38]
+;;;383                        | (SYS_GPB_MFPL_PB2MFP_ADC0_CH2 | SYS_GPB_MFPL_PB1MFP_ADC0_CH1| SYS_GPB_MFPL_PB0MFP_ADC0_CH0) ;
+;;;384    
+;;;385        /* Set PB.0 ~ PB.3 to input mode */
+;;;386        GPIO_SetMode(PB, BIT0|BIT1|BIT2|BIT3|BIT4|BIT5|BIT6, GPIO_MODE_INPUT);
+000092  4c0c              LDR      r4,|L7.196|
+000094  2200              MOVS     r2,#0
+000096  217f              MOVS     r1,#0x7f
+000098  4620              MOV      r0,r4
+00009a  f7fffffe          BL       GPIO_SetMode
+;;;387    
+;;;388        /* Disable the PB0 ~ PB3 digital input path to avoid the leakage current. */
+;;;389        GPIO_DISABLE_DIGITAL_PATH(PB, BIT0|BIT1|BIT2|BIT3|BIT4|BIT5|BIT6);
+00009e  6861              LDR      r1,[r4,#4]
+0000a0  227f              MOVS     r2,#0x7f
+0000a2  0412              LSLS     r2,r2,#16
+0000a4  4311              ORRS     r1,r1,r2
+0000a6  6061              STR      r1,[r4,#4]
+0000a8  4907              LDR      r1,|L7.200|
+0000aa  2000              MOVS     r0,#0
+0000ac  6008              STR      r0,[r1,#0]
+;;;390    
+;;;391    
+;;;392        /* Lock protected registers */
+;;;393        SYS_LockReg();
+;;;394    }
+0000ae  bd70              POP      {r4-r6,pc}
+;;;395    
                           ENDP
 
-0000a2  0000              DCW      0x0000
-                  |L6.164|
+                  |L7.176|
                           DCD      0x5f803d10
-                  |L6.168|
+                  |L7.180|
                           DCD      0x5f400005
-                  |L6.172|
+                  |L7.184|
                           DCD      0x6743fe1c
-                  |L6.176|
-                          DCD      0x0ff0fff0
-                  |L6.180|
-                          DCD      0x10010001
-                  |L6.184|
-                          DCD      0x00000491
-                  |L6.188|
+                  |L7.188|
+                          DCD      0xff000fff
+                  |L7.192|
+                          DCD      0x00111000
+                  |L7.196|
                           DCD      0x40004040
-                  |L6.192|
-                          DCD      0x04910000
-                  |L6.196|
+                  |L7.200|
                           DCD      0x40000100
 
                           AREA ||i.SYS_UnlockReg||, CODE, READONLY, ALIGN=2
@@ -477,36 +684,36 @@
 ;;;1344       do {
 ;;;1345           SYS->REGLCTL = 0x59;
 000002  2159              MOVS     r1,#0x59
-000004  4804              LDR      r0,|L7.24|
+000004  4804              LDR      r0,|L8.24|
 ;;;1346           SYS->REGLCTL = 0x16;
 000006  2216              MOVS     r2,#0x16
 ;;;1347           SYS->REGLCTL = 0x88;
 000008  2388              MOVS     r3,#0x88
-                  |L7.10|
+                  |L8.10|
 00000a  6001              STR      r1,[r0,#0]            ;1345
 00000c  6002              STR      r2,[r0,#0]            ;1346
 00000e  6003              STR      r3,[r0,#0]
 ;;;1348       } while (SYS->REGLCTL == 0);
 000010  6804              LDR      r4,[r0,#0]
 000012  2c00              CMP      r4,#0
-000014  d0f9              BEQ      |L7.10|
+000014  d0f9              BEQ      |L8.10|
 ;;;1349   }
 000016  bd10              POP      {r4,pc}
 ;;;1350   
                           ENDP
 
-                  |L7.24|
+                  |L8.24|
                           DCD      0x40000100
 
                           AREA ||i.TIMER3_Init||, CODE, READONLY, ALIGN=2
 
                   TIMER3_Init PROC
-;;;253    
-;;;254    void TIMER3_Init(void)
+;;;316    
+;;;317    void TIMER3_Init(void)
 000000  b510              PUSH     {r4,lr}
-;;;255    {
-;;;256        TIMER_Open(TIMER3, TIMER_PERIODIC_MODE, 1000);
-000002  4c0a              LDR      r4,|L8.44|
+;;;318    {
+;;;319        TIMER_Open(TIMER3, TIMER_PERIODIC_MODE, 1000);
+000002  4c0a              LDR      r4,|L9.44|
 000004  227d              MOVS     r2,#0x7d
 000006  2101              MOVS     r1,#1
 000008  00d2              LSLS     r2,r2,#3
@@ -518,121 +725,79 @@
 000016  4308              ORRS     r0,r0,r1
 000018  6020              STR      r0,[r4,#0]
 00001a  1488              ASRS     r0,r1,#18
-00001c  4904              LDR      r1,|L8.48|
+00001c  4904              LDR      r1,|L9.48|
 00001e  6008              STR      r0,[r1,#0]
 000020  6820              LDR      r0,[r4,#0]
 000022  0589              LSLS     r1,r1,#22
 000024  4308              ORRS     r0,r0,r1
 000026  6020              STR      r0,[r4,#0]
-;;;257        TIMER_EnableInt(TIMER3);
-;;;258        NVIC_EnableIRQ(TMR3_IRQn);	
-;;;259        TIMER_Start(TIMER3);
-;;;260    }
+;;;320        TIMER_EnableInt(TIMER3);
+;;;321        NVIC_EnableIRQ(TMR3_IRQn);	
+;;;322        TIMER_Start(TIMER3);
+;;;323    }
 000028  bd10              POP      {r4,pc}
-;;;261    
+;;;324    
                           ENDP
 
 00002a  0000              DCW      0x0000
-                  |L8.44|
+                  |L9.44|
                           DCD      0x40051020
-                  |L8.48|
+                  |L9.48|
                           DCD      0xe000e100
 
                           AREA ||i.TMR3_IRQHandler||, CODE, READONLY, ALIGN=2
 
                   TMR3_IRQHandler PROC
-;;;220    
-;;;221    void TMR3_IRQHandler(void)
-000000  b510              PUSH     {r4,lr}
-000002  4916              LDR      r1,|L9.92|
-000004  6888              LDR      r0,[r1,#8]
-000006  07c0              LSLS     r0,r0,#31
-000008  0fc0              LSRS     r0,r0,#31
-;;;222    {
-00000a  d026              BEQ      |L9.90|
-00000c  2301              MOVS     r3,#1
-00000e  608b              STR      r3,[r1,#8]
-;;;223    //	static uint32_t LOG = 0;
-;;;224    	static uint16_t CNT = 0;
-;;;225    	static uint16_t CNT_ADC = 0;
-;;;226    	static uint8_t flag_num = 0;
-;;;227    	
-;;;228        if(TIMER_GetIntFlag(TIMER3) == 1)
-;;;229        {
-;;;230            TIMER_ClearIntFlag(TIMER3);
-;;;231    	
-;;;232    		if (CNT++ >= 1000)
-000010  4a13              LDR      r2,|L9.96|
-000012  247d              MOVS     r4,#0x7d
-000014  8890              LDRH     r0,[r2,#4]  ; CNT
-000016  00e4              LSLS     r4,r4,#3
-000018  1c41              ADDS     r1,r0,#1
-00001a  8091              STRH     r1,[r2,#4]
-00001c  2100              MOVS     r1,#0
-00001e  42a0              CMP      r0,r4
-000020  d304              BCC      |L9.44|
-;;;233    		{		
-;;;234    			CNT = 0;
-;;;235    //        	printf("%s : %4d\r\n",__FUNCTION__,LOG++);
-;;;236    			PB14 ^= 1;
-000022  4c10              LDR      r4,|L9.100|
-000024  8091              STRH     r1,[r2,#4]            ;234
-000026  6ba0              LDR      r0,[r4,#0x38]
-000028  4058              EORS     r0,r0,r3
-00002a  63a0              STR      r0,[r4,#0x38]
-                  |L9.44|
-;;;237    		}
-;;;238    
-;;;239    		if (CNT_ADC++ >= ADC_SAMPLETIME_MS)
-00002c  88d0              LDRH     r0,[r2,#6]  ; CNT_ADC
-00002e  1c43              ADDS     r3,r0,#1
-000030  80d3              STRH     r3,[r2,#6]
-000032  280a              CMP      r0,#0xa
-000034  d311              BCC      |L9.90|
-;;;240    		{		
-;;;241    			CNT_ADC = 0;
-000036  80d1              STRH     r1,[r2,#6]
-;;;242    
-;;;243    			aADCxCH = adc_data[flag_num].adc_ch;
-000038  7810              LDRB     r0,[r2,#0]  ; flag_num
-00003a  4b0b              LDR      r3,|L9.104|
-00003c  0041              LSLS     r1,r0,#1
-00003e  18cc              ADDS     r4,r1,r3
-000040  7864              LDRB     r4,[r4,#1]
-000042  8054              STRH     r4,[r2,#2]
-;;;244    			flag_num = (flag_num >= adc_data[flag_num].idx) ? (0) : (flag_num + 1) ;
-000044  5c59              LDRB     r1,[r3,r1]
-000046  4281              CMP      r1,r0
-000048  d801              BHI      |L9.78|
-00004a  2000              MOVS     r0,#0
-00004c  e000              B        |L9.80|
-                  |L9.78|
-00004e  1c40              ADDS     r0,r0,#1
-                  |L9.80|
-000050  7010              STRB     r0,[r2,#0]
-;;;245    		
-;;;246    			ADC_InitChannel(aADCxCH);
-000052  8850              LDRH     r0,[r2,#2]  ; aADCxCH
-000054  b2c0              UXTB     r0,r0
-000056  f7fffffe          BL       ADC_InitChannel
-                  |L9.90|
-;;;247    
-;;;248    		}
-;;;249    		
-;;;250        }
-;;;251    }
-00005a  bd10              POP      {r4,pc}
-;;;252    
+;;;297    
+;;;298    void TMR3_IRQHandler(void)
+000000  480a              LDR      r0,|L10.44|
+000002  6881              LDR      r1,[r0,#8]
+000004  07c9              LSLS     r1,r1,#31
+000006  0fc9              LSRS     r1,r1,#31
+;;;299    {
+000008  d00f              BEQ      |L10.42|
+00000a  2301              MOVS     r3,#1
+00000c  6083              STR      r3,[r0,#8]
+;;;300    //	static uint32_t LOG = 0;
+;;;301    	static uint16_t CNT = 0;
+;;;302    	
+;;;303        if(TIMER_GetIntFlag(TIMER3) == 1)
+;;;304        {
+;;;305            TIMER_ClearIntFlag(TIMER3);
+;;;306    	
+;;;307    		if (CNT++ >= 1000)
+00000e  4908              LDR      r1,|L10.48|
+000010  8888              LDRH     r0,[r1,#4]  ; CNT
+000012  1c42              ADDS     r2,r0,#1
+000014  808a              STRH     r2,[r1,#4]
+000016  227d              MOVS     r2,#0x7d
+000018  00d2              LSLS     r2,r2,#3
+00001a  4290              CMP      r0,r2
+00001c  d305              BCC      |L10.42|
+;;;308    		{		
+;;;309    			CNT = 0;
+00001e  2000              MOVS     r0,#0
+000020  8088              STRH     r0,[r1,#4]
+;;;310    //        	printf("%s : %4d\r\n",__FUNCTION__,LOG++);
+;;;311    			PB14 ^= 1;
+000022  4804              LDR      r0,|L10.52|
+000024  6b81              LDR      r1,[r0,#0x38]
+000026  4059              EORS     r1,r1,r3
+000028  6381              STR      r1,[r0,#0x38]
+                  |L10.42|
+;;;312    		}		
+;;;313        }
+;;;314    }
+00002a  4770              BX       lr
+;;;315    
                           ENDP
 
-                  |L9.92|
+                  |L10.44|
                           DCD      0x40051020
-                  |L9.96|
+                  |L10.48|
                           DCD      ||.data||
-                  |L9.100|
+                  |L10.52|
                           DCD      0x40004840
-                  |L9.104|
-                          DCD      ||.constdata||
 
                           AREA ||i.UART0_Init||, CODE, READONLY, ALIGN=2
 
@@ -642,59 +807,59 @@
                           REQUIRE _printf_d
                           REQUIRE _printf_int_dec
                   UART0_Init PROC
-;;;262    
-;;;263    void UART0_Init(void)
+;;;325    
+;;;326    void UART0_Init(void)
 000000  b510              PUSH     {r4,lr}
-;;;264    {
-;;;265        SYS_ResetModule(UART0_RST);
-000002  4813              LDR      r0,|L10.80|
+;;;327    {
+;;;328        SYS_ResetModule(UART0_RST);
+000002  4813              LDR      r0,|L11.80|
 000004  f7fffffe          BL       SYS_ResetModule
-;;;266    
-;;;267        /* Configure UART0 and set UART0 baud rate */
-;;;268        UART_Open(UART0, 115200);
+;;;329    
+;;;330        /* Configure UART0 and set UART0 baud rate */
+;;;331        UART_Open(UART0, 115200);
 000008  21e1              MOVS     r1,#0xe1
 00000a  0249              LSLS     r1,r1,#9
-00000c  4811              LDR      r0,|L10.84|
+00000c  4811              LDR      r0,|L11.84|
 00000e  f7fffffe          BL       UART_Open
-;;;269    
-;;;270    	/* Set UART receive time-out */
-;;;271    //	UART_SetTimeoutCnt(UART0, 20);
-;;;272    
-;;;273    	printf("\r\nCLK_GetCPUFreq : %8d\r\n",CLK_GetCPUFreq());
+;;;332    
+;;;333    	/* Set UART receive time-out */
+;;;334    //	UART_SetTimeoutCnt(UART0, 20);
+;;;335    
+;;;336    	printf("\r\nCLK_GetCPUFreq : %8d\r\n",CLK_GetCPUFreq());
 000012  f7fffffe          BL       CLK_GetCPUFreq
 000016  4601              MOV      r1,r0
-000018  a00f              ADR      r0,|L10.88|
+000018  a00f              ADR      r0,|L11.88|
 00001a  f7fffffe          BL       __2printf
-;;;274    	printf("CLK_GetHXTFreq : %8d\r\n",CLK_GetHXTFreq());
+;;;337    	printf("CLK_GetHXTFreq : %8d\r\n",CLK_GetHXTFreq());
 00001e  f7fffffe          BL       CLK_GetHXTFreq
 000022  4601              MOV      r1,r0
-000024  a013              ADR      r0,|L10.116|
+000024  a013              ADR      r0,|L11.116|
 000026  f7fffffe          BL       __2printf
-;;;275    	printf("CLK_GetLXTFreq : %8d\r\n",CLK_GetLXTFreq());	
+;;;338    	printf("CLK_GetLXTFreq : %8d\r\n",CLK_GetLXTFreq());	
 00002a  f7fffffe          BL       CLK_GetLXTFreq
 00002e  4601              MOV      r1,r0
-000030  a016              ADR      r0,|L10.140|
+000030  a016              ADR      r0,|L11.140|
 000032  f7fffffe          BL       __2printf
-;;;276    	printf("CLK_GetPCLK0Freq : %8d\r\n",CLK_GetPCLK0Freq());
+;;;339    	printf("CLK_GetPCLK0Freq : %8d\r\n",CLK_GetPCLK0Freq());
 000036  f7fffffe          BL       CLK_GetPCLK0Freq
 00003a  4601              MOV      r1,r0
-00003c  a019              ADR      r0,|L10.164|
+00003c  a019              ADR      r0,|L11.164|
 00003e  f7fffffe          BL       __2printf
-;;;277    	printf("CLK_GetPCLK1Freq : %8d\r\n",CLK_GetPCLK1Freq());	
+;;;340    	printf("CLK_GetPCLK1Freq : %8d\r\n",CLK_GetPCLK1Freq());	
 000042  f7fffffe          BL       CLK_GetPCLK1Freq
 000046  4601              MOV      r1,r0
-000048  a01d              ADR      r0,|L10.192|
+000048  a01d              ADR      r0,|L11.192|
 00004a  f7fffffe          BL       __2printf
-;;;278    }
+;;;341    }
 00004e  bd10              POP      {r4,pc}
-;;;279    
+;;;342    
                           ENDP
 
-                  |L10.80|
+                  |L11.80|
                           DCD      0x04000010
-                  |L10.84|
+                  |L11.84|
                           DCD      0x40070000
-                  |L10.88|
+                  |L11.88|
 000058  0d0a434c          DCB      "\r\nCLK_GetCPUFreq : %8d\r\n",0
 00005c  4b5f4765
 000060  74435055
@@ -705,7 +870,7 @@
 000071  00                DCB      0
 000072  00                DCB      0
 000073  00                DCB      0
-                  |L10.116|
+                  |L11.116|
 000074  434c4b5f          DCB      "CLK_GetHXTFreq : %8d\r\n",0
 000078  47657448
 00007c  58544672
@@ -713,7 +878,7 @@
 000084  20253864
 000088  0d0a00  
 00008b  00                DCB      0
-                  |L10.140|
+                  |L11.140|
 00008c  434c4b5f          DCB      "CLK_GetLXTFreq : %8d\r\n",0
 000090  4765744c
 000094  58544672
@@ -721,7 +886,7 @@
 00009c  20253864
 0000a0  0d0a00  
 0000a3  00                DCB      0
-                  |L10.164|
+                  |L11.164|
 0000a4  434c4b5f          DCB      "CLK_GetPCLK0Freq : %8d\r\n",0
 0000a8  47657450
 0000ac  434c4b30
@@ -732,7 +897,7 @@
 0000bd  00                DCB      0
 0000be  00                DCB      0
 0000bf  00                DCB      0
-                  |L10.192|
+                  |L11.192|
 0000c0  434c4b5f          DCB      "CLK_GetPCLK1Freq : %8d\r\n",0
 0000c4  47657450
 0000c8  434c4b31
@@ -747,218 +912,159 @@
                           AREA ||i.convertDecToBin||, CODE, READONLY, ALIGN=2
 
                   convertDecToBin PROC
-;;;102    
-;;;103    void convertDecToBin(int n)
+;;;116    
+;;;117    void convertDecToBin(int n)
 000000  b5f1              PUSH     {r0,r4-r7,lr}
-;;;104    {
+;;;118    {
 000002  b082              SUB      sp,sp,#8
-;;;105        int k = 0;
+;;;119        int k = 0;
 000004  2500              MOVS     r5,#0
-;;;106        unsigned char *p = (unsigned char*)&n;
+;;;120        unsigned char *p = (unsigned char*)&n;
 000006  a802              ADD      r0,sp,#8
-;;;107        int val2 = 0;
-;;;108        int i = 0;
-;;;109        for(k = 0; k <= 1; k++)
-;;;110        {
-;;;111            val2 = *(p+k);
-;;;112            for (i = 7; i >= 0; i--)
-;;;113            {
-;;;114                if(val2 & (1 << i))
+;;;121        int val2 = 0;
+;;;122        int i = 0;
+;;;123        for(k = 0; k <= 1; k++)
+;;;124        {
+;;;125            val2 = *(p+k);
+;;;126            for (i = 7; i >= 0; i--)
+;;;127            {
+;;;128                if(val2 & (1 << i))
 000008  2701              MOVS     r7,#1
 00000a  9000              STR      r0,[sp,#0]
-                  |L11.12|
-00000c  9800              LDR      r0,[sp,#0]            ;111
-00000e  2407              MOVS     r4,#7                 ;112
-000010  5d46              LDRB     r6,[r0,r5]            ;111
-                  |L11.18|
+                  |L12.12|
+00000c  9800              LDR      r0,[sp,#0]            ;125
+00000e  2407              MOVS     r4,#7                 ;126
+000010  5d46              LDRB     r6,[r0,r5]            ;125
+                  |L12.18|
 000012  4638              MOV      r0,r7
 000014  40a0              LSLS     r0,r0,r4
 000016  4230              TST      r0,r6
-000018  d001              BEQ      |L11.30|
-;;;115                    printf("1");
-00001a  a007              ADR      r0,|L11.56|
-00001c  e000              B        |L11.32|
-                  |L11.30|
-;;;116                else
-;;;117                    printf("0");
-00001e  a007              ADR      r0,|L11.60|
-                  |L11.32|
+000018  d001              BEQ      |L12.30|
+;;;129                    printf("1");
+00001a  a007              ADR      r0,|L12.56|
+00001c  e000              B        |L12.32|
+                  |L12.30|
+;;;130                else
+;;;131                    printf("0");
+00001e  a007              ADR      r0,|L12.60|
+                  |L12.32|
 000020  f7fffffe          BL       __2printf
 000024  1e64              SUBS     r4,r4,#1
-000026  d5f4              BPL      |L11.18|
-;;;118            }
-;;;119            printf(" ");
-000028  a005              ADR      r0,|L11.64|
+000026  d5f4              BPL      |L12.18|
+;;;132            }
+;;;133            printf(" ");
+000028  a005              ADR      r0,|L12.64|
 00002a  f7fffffe          BL       __2printf
 00002e  1c6d              ADDS     r5,r5,#1
-000030  2d01              CMP      r5,#1                 ;109
-000032  ddeb              BLE      |L11.12|
-;;;120        }
-;;;121    }
+000030  2d01              CMP      r5,#1                 ;123
+000032  ddeb              BLE      |L12.12|
+;;;134        }
+;;;135    }
 000034  bdfe              POP      {r1-r7,pc}
-;;;122    
+;;;136    
                           ENDP
 
 000036  0000              DCW      0x0000
-                  |L11.56|
+                  |L12.56|
 000038  3100              DCB      "1",0
 00003a  00                DCB      0
 00003b  00                DCB      0
-                  |L11.60|
+                  |L12.60|
 00003c  3000              DCB      "0",0
 00003e  00                DCB      0
 00003f  00                DCB      0
-                  |L11.64|
+                  |L12.64|
 000040  2000              DCB      " ",0
 000042  00                DCB      0
 000043  00                DCB      0
 
                           AREA ||i.main||, CODE, READONLY, ALIGN=2
 
-                          REQUIRE _printf_pre_padding
-                          REQUIRE _printf_percent
-                          REQUIRE _printf_widthprec
-                          REQUIRE _printf_d
-                          REQUIRE _printf_x
-                          REQUIRE _printf_int_dec
-                          REQUIRE _printf_longlong_hex
                   main PROC
-;;;336    
-;;;337    int main()
-000000  2400              MOVS     r4,#0
-;;;338    {
-;;;339    	uint8_t idx = 0;
-;;;340    	uint16_t adc_data = 0;	
-;;;341    
-;;;342        SYS_Init();
-000002  f7fffffe          BL       SYS_Init
-;;;343    
-;;;344        UART0_Init();
-000006  f7fffffe          BL       UART0_Init
-;;;345    
-;;;346    	GPIO_Init();
-00000a  f7fffffe          BL       GPIO_Init
-;;;347    
-;;;348    	TIMER3_Init();
-00000e  f7fffffe          BL       TIMER3_Init
-;;;349    
-;;;350        /* Enable ADC converter */
-;;;351        ADC_POWER_ON(ADC);
-000012  4910              LDR      r1,|L12.84|
-000014  6808              LDR      r0,[r1,#0]
-000016  2201              MOVS     r2,#1
-000018  4310              ORRS     r0,r0,r2
-00001a  6008              STR      r0,[r1,#0]
-;;;352    
-;;;353        /*Wait for ADC internal power ready*/
-;;;354        CLK_SysTickDelay(10000);
-00001c  480e              LDR      r0,|L12.88|
-00001e  f7fffffe          BL       CLK_SysTickDelay
-;;;355    
-;;;356        /* Got no where to go, just loop forever */
-;;;357        while(1)
-;;;358        {
-;;;359    		#if 1
-;;;360    		adc_data = ADCxConvertedData[idx];
-000022  4e0e              LDR      r6,|L12.92|
-;;;361    //		convertDecToBin(adc_data);
-;;;362    		printf("0x%2X:0x%3X(%4dmv)," , idx , adc_data , ADC_CALC_DATA_TO_VOLTAGE(adc_data,ADC_REF_VOLTAGE));
-000024  4f0e              LDR      r7,|L12.96|
-                  |L12.38|
-000026  0060              LSLS     r0,r4,#1              ;360
-000028  5a35              LDRH     r5,[r6,r0]            ;360
-00002a  480e              LDR      r0,|L12.100|
-00002c  4639              MOV      r1,r7
-00002e  4368              MULS     r0,r5,r0
-000030  f7fffffe          BL       __aeabi_uidivmod
-000034  4603              MOV      r3,r0
-000036  462a              MOV      r2,r5
-000038  4621              MOV      r1,r4
-00003a  a00b              ADR      r0,|L12.104|
-00003c  f7fffffe          BL       __2printf
-;;;363    
-;;;364    		if (idx++ >= 3)
-000040  4620              MOV      r0,r4
-000042  1c64              ADDS     r4,r4,#1
-000044  b2e4              UXTB     r4,r4
-000046  2803              CMP      r0,#3
-000048  d3ed              BCC      |L12.38|
-;;;365    		{
-;;;366    			printf("\r\n");
-00004a  a00c              ADR      r0,|L12.124|
-00004c  f7fffffe          BL       __2printf
-;;;367    			idx = 0;
-000050  2400              MOVS     r4,#0
-000052  e7e8              B        |L12.38|
-;;;368    		}
-;;;369    //		idx = (idx++ >= 3) ? (0) : (idx) ;
-;;;370    		
-;;;371    		#else
-;;;372    		convertDecToBin(adc_value1);
-;;;373    		printf(" 0x%4X , %4dmv " , adc_value1 , ADC_CALC_DATA_TO_VOLTAGE(adc_value1,ADC_REF_VOLTAGE));
-;;;374    		printf("      ");
-;;;375    		convertDecToBin(adc_value2);	
-;;;376    		printf(" 0x%4X , %4dmv\r\n" , adc_value2, ADC_CALC_DATA_TO_VOLTAGE(adc_value2,ADC_REF_VOLTAGE));
-;;;377    		#endif
-;;;378        }
-;;;379    }
-;;;380    
+;;;403    
+;;;404    int main()
+000000  f7fffffe          BL       SYS_Init
+;;;405    {
+;;;406        SYS_Init();
+;;;407    
+;;;408        UART0_Init();
+000004  f7fffffe          BL       UART0_Init
+;;;409    	GPIO_Init();
+000008  f7fffffe          BL       GPIO_Init
+;;;410    	TIMER3_Init();
+00000c  f7fffffe          BL       TIMER3_Init
+;;;411    	
+;;;412        /* Enable ADC converter */
+;;;413        ADC_POWER_ON(ADC);
+000010  4806              LDR      r0,|L13.44|
+000012  6801              LDR      r1,[r0,#0]
+000014  2201              MOVS     r2,#1
+000016  4311              ORRS     r1,r1,r2
+000018  6001              STR      r1,[r0,#0]
+;;;414    
+;;;415        /*Wait for ADC internal power ready*/
+;;;416        CLK_SysTickDelay(10000);
+00001a  4805              LDR      r0,|L13.48|
+00001c  f7fffffe          BL       CLK_SysTickDelay
+;;;417    
+;;;418    	ADC_Process(State_avergage);
+000020  2000              MOVS     r0,#0
+                  |L13.34|
+000022  f7fffffe          BL       ADC_Process
+;;;419    
+;;;420        /* Got no where to go, just loop forever */
+;;;421        while(1)
+;;;422        {
+;;;423    		ADC_Process(State_moving);
+000026  2001              MOVS     r0,#1
+000028  e7fb              B        |L13.34|
+;;;424    		
+;;;425        }
+;;;426    }
+;;;427    
                           ENDP
 
-                  |L12.84|
+00002a  0000              DCW      0x0000
+                  |L13.44|
                           DCD      0x40043080
-                  |L12.88|
+                  |L13.48|
                           DCD      0x00002710
-                  |L12.92|
-                          DCD      ||.data||+0xc
-                  |L12.96|
-                          DCD      0x00000fff
-                  |L12.100|
-                          DCD      0x00000ce4
-                  |L12.104|
-000068  30782532          DCB      "0x%2X:0x%3X(%4dmv),",0
-00006c  583a3078
-000070  25335828
-000074  2534646d
-000078  76292c00
-                  |L12.124|
-00007c  0d0a00            DCB      "\r\n",0
-00007f  00                DCB      0
+
+                          AREA ||.bss||, DATA, NOINIT, ALIGN=1
+
+                  ADC_DataArray
+                          %        14
 
                           AREA ||.constdata||, DATA, READONLY, ALIGN=0
 
-                  adc_data
-000000  01000204          DCB      0x01,0x00,0x02,0x04
-000004  0307040a          DCB      0x03,0x07,0x04,0x0a
-000008  ff10              DCB      0xff,0x10
+                  adc_measure
+000000  00010203          DCB      0x00,0x01,0x02,0x03
+000004  04050610          DCB      0x04,0x05,0x06,0x10
 
                           AREA ||.data||, DATA, ALIGN=2
 
-                  flag_num
-000000  0000              DCB      0x00,0x00
-                  aADCxCH
+                  ADC_TargetChannel
+000000  0000              DCW      0x0000
+                  ADC_Datax
 000002  0000              DCW      0x0000
                   ||CNT||
 000004  0000              DCW      0x0000
-                  CNT_ADC
-000006  0000              DCW      0x0000
+000006  0000              DCB      0x00,0x00
                   AVdd
                           DCD      0x00000000
-                  ADCxConvertedData
-00000c  0000              DCW      0x0000
-00000e  0000              DCB      0x00,0x00
-                          DCD      0x00000000
-
-                          AREA ||area_number.17||, DATA, ALIGN=2
-
-                          EXPORTAS ||area_number.17||, ||.data||
                   BitFlag
                           DCD      0x00000000
 
-                          AREA ||area_number.18||, DATA, ALIGN=0
+                          AREA ||area_number.19||, DATA, ALIGN=0
 
-                          EXPORTAS ||area_number.18||, ||.data||
+                          EXPORTAS ||area_number.19||, ||.data||
                   ADC_CH_TypeDef
+000000  00                DCB      0x00
+
+                          AREA ||area_number.20||, DATA, ALIGN=0
+
+                          EXPORTAS ||area_number.20||, ||.data||
+                  ADC_State
 000000  00                DCB      0x00
 
 ;*** Start embedded assembler ***
@@ -966,9 +1072,9 @@
 #line 1 "..\\main.c"
 	AREA ||.rev16_text||, CODE
 	THUMB
-	EXPORT |__asm___6_main_c_adc_data____REV16|
+	EXPORT |__asm___6_main_c_d652c64e____REV16|
 #line 388 "..\\..\\..\\Library\\CMSIS\\Include\\cmsis_armcc.h"
-|__asm___6_main_c_adc_data____REV16| PROC
+|__asm___6_main_c_d652c64e____REV16| PROC
 #line 389
 
  rev16 r0, r0
@@ -976,9 +1082,9 @@
 	ENDP
 	AREA ||.revsh_text||, CODE
 	THUMB
-	EXPORT |__asm___6_main_c_adc_data____REVSH|
+	EXPORT |__asm___6_main_c_d652c64e____REVSH|
 #line 402
-|__asm___6_main_c_adc_data____REVSH| PROC
+|__asm___6_main_c_d652c64e____REVSH| PROC
 #line 403
 
  revsh r0, r0

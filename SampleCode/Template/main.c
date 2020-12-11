@@ -11,16 +11,17 @@
 enum
 {
 	ADC0_CH0 = 0 ,
-	ADC0_CH1 , 
-	
+	ADC0_CH1 , 	
 	ADC0_CH2 , 
 	ADC0_CH3 , 
 	ADC0_CH4 , 
+	
 	ADC0_CH5 , 
 	ADC0_CH6 , 
 	ADC0_CH7 , 
 	ADC0_CH8 , 
 	ADC0_CH9 , 
+	
 	ADC0_CH10 , 
 	ADC0_CH11 , 
 	ADC0_CH12 ,
@@ -33,37 +34,50 @@ enum
 
 typedef struct
 {	
-	uint8_t idx ;
 	uint8_t adc_ch;
 }ADC_struct;
 
-const ADC_struct adc_data[] =
-{
-	{1 		, ADC0_CH0},
-	{2 		, ADC0_CH4},
-	{3 		, ADC0_CH7},
-	{4 		, ADC0_CH10},
+enum{
+	State_avergage = 0 ,
+	State_moving ,		
+	
+	State_DEFAULT	
+}ADC_State;
 
-	{0xFF 	, ADC_CH_DEFAULT},	
+const ADC_struct adc_measure[] =
+{
+	{ADC0_CH0},
+	{ADC0_CH1},
+	{ADC0_CH2},
+	{ADC0_CH3},
+	{ADC0_CH4},
+	{ADC0_CH5},
+	{ADC0_CH6},
+
+
+	{ADC_CH_DEFAULT},	
 };
 
-#define ADC_SAMPLETIME_MS					(uint16_t) (10)
+#define ADC_SAMPLETIME_MS						(uint16_t) (10)
 
-#define ADC_RESOLUTION						((uint16_t)(4096u))
-#define ADC_REF_VOLTAGE						((uint16_t)(3300u))	//(float)(3.3f)
+#define ADC_RESOLUTION							((uint16_t)(4096u))
+#define ADC_REF_VOLTAGE							((uint16_t)(3300u))	//(float)(3.3f)
 
-#define ABS(X)  								((X) > 0 ? (X) : -(X)) 
+#define ABS(X)  									((X) > 0 ? (X) : -(X)) 
 
-#define ADC_DIGITAL_SCALE(void) 				(0xFFFU >> ((0) >> (3U - 1U)))		//0: 12 BIT 
-#define ADC_CALC_DATA_TO_VOLTAGE(DATA,VREF) ((DATA) * (VREF) / ADC_DIGITAL_SCALE())
+#define ADC_DIGITAL_SCALE(void) 					(0xFFFU >> ((0) >> (3U - 1U)))		//0: 12 BIT 
+#define ADC_CALC_DATA_TO_VOLTAGE(DATA,VREF) 	((DATA) * (VREF) / ADC_DIGITAL_SCALE())
 
-#define ADCextendSampling 					(0)
+#define ADCextendSampling 						(10)
 
-#define ADC_CH_NUM	 						(4)
+#define ADC_AVG_TRAGET 						(8)
+#define ADC_AVG_POW	 					(3)
+#define ADC_CH_NUM	 						(7)
 
-volatile uint16_t aADCxCH = 0;
+volatile uint16_t ADC_TargetChannel = 0;
+volatile uint16_t ADC_Datax = 0;
 uint32_t AVdd = 0;
-uint16_t ADCxConvertedData[ADC_CH_NUM] = {0};
+uint16_t ADC_DataArray[ADC_CH_NUM] = {0};
 
 typedef enum{
 	flag_ADC_Data_Ready = 0 ,
@@ -74,7 +88,7 @@ typedef enum{
 #define HIBYTE(v1)              					((uint8_t)((v1)>>8))                      //v1 is UINT16
 #define LOBYTE(v1)              					((uint8_t)((v1)&0xFF))
 
-#define	USE_SIMPLE_AVG
+#define MONITOR_PIN				 				(PB15)
 
 volatile uint32_t BitFlag = 0;
 #define BitFlag_ON(flag)							(BitFlag|=flag)
@@ -120,23 +134,12 @@ void convertDecToBin(int n)
     }
 }
 
+
 void ADC_IRQHandler(void)
 {
-	uint8_t ch_idx = 0;
-
-	for (ch_idx = 0 ; adc_data[ch_idx].idx < 0xFF ; ch_idx++)
-	{
-		if (aADCxCH == adc_data[ch_idx].adc_ch)
-		{
-			break;
-		}
-		else
-		{
-			continue;
-		}
-	}
-	ADCxConvertedData[ch_idx] = ADC_GET_CONVERSION_DATA(ADC, aADCxCH);
-	
+	set_flag(flag_ADC_Data_Ready,ENABLE);	
+	MONITOR_PIN = 1;
+	ADC_Datax = ADC_GET_CONVERSION_DATA(ADC, ADC_TargetChannel);	
     ADC_CLR_INT_FLAG(ADC, ADC_ADF_INT); /* Clear the A/D interrupt flag */
 }
 
@@ -173,16 +176,18 @@ void ADC_ReadAVdd(void)
 
 void ADC_InitChannel(uint8_t ch)
 {
+	set_flag(flag_ADC_Data_Ready,DISABLE);
+
 //	ADC_ReadAVdd();
 
-//    /* Enable ADC converter */
+    /* Enable ADC converter */
 //    ADC_POWER_ON(ADC);
 
-//    /*Wait for ADC internal power ready*/
+    /*Wait for ADC internal power ready*/
 //    CLK_SysTickDelay(10000);
 
     /* Set input mode as single-end, and Single mode*/
-    ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE,(uint32_t) 0x1 << ch);//BIT0|BIT4
+    ADC_Open(ADC, ADC_ADCR_DIFFEN_SINGLE_END, ADC_ADCR_ADMD_SINGLE,(uint32_t) 0x1 << ch);
 
     /* To sample band-gap precisely, the ADC capacitor must be charged at least 3 us for charging the ADC capacitor ( Cin )*/
     /* Sampling time = extended sampling time + 1 */
@@ -211,19 +216,89 @@ void ADC_InitChannel(uint8_t ch)
     /* Start ADC conversion */
     ADC_START_CONV(ADC);
 	
+	MONITOR_PIN = 0;
 }
+
+
+void ADC_Process(uint8_t state)
+{
+	uint8_t idx = 0;
+	volatile	uint32_t sum = 0;
+	uint16_t tmp = 0;
+	
+	switch(state)
+	{
+		case State_avergage:	
+			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+			{
+				ADC_TargetChannel = adc_measure[idx].adc_ch;
+				for ( tmp = 0 ; tmp < ADC_AVG_TRAGET ; tmp++)
+				{
+					ADC_InitChannel(ADC_TargetChannel);
+					while(!is_flag_set(flag_ADC_Data_Ready));
+					MONITOR_PIN = 0;
+					ADC_DISABLE_INT(ADC, ADC_ADF_INT);
+
+					sum += ADC_Datax;											//sum the first 8 ADC data
+				}
+				ADC_DataArray[idx] = (uint16_t) (sum >> ADC_AVG_POW);			//do average
+			}
+
+			break;
+
+		case State_moving:
+			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+			{
+				ADC_TargetChannel = adc_measure[idx].adc_ch;
+				ADC_InitChannel(ADC_TargetChannel);
+				while(!is_flag_set(flag_ADC_Data_Ready));
+				MONITOR_PIN = 0;
+				ADC_DISABLE_INT(ADC, ADC_ADF_INT);
+
+				sum = ADC_DataArray[idx] << ADC_AVG_POW;					//extend the original average data
+				sum -= ADC_DataArray[idx];									//subtract the old average data
+				sum += ADC_Datax;												//add the new adc data
+				ADC_DataArray[idx] = (uint16_t) (sum >> ADC_AVG_POW);		//do average again
+			}
+
+			#if 1	// debug
+			for ( idx = 0 ; idx < ADC_CH_NUM ; idx++)
+			{
+				tmp = ADC_DataArray[idx];
+//				convertDecToBin(tmp);//ADC_DataArray[idx]
+//				printf("%d:%4dmv," , idx ,ADC_CALC_DATA_TO_VOLTAGE(ADC_DataArray[idx],ADC_REF_VOLTAGE));
+//				printf("%d:%3X,%4d ," , idx ,ADC_DataArray[idx],ADC_CALC_DATA_TO_VOLTAGE(ADC_DataArray[idx],ADC_REF_VOLTAGE));
+//				printf("%d:0x%3X," , 4 , ADC_DataArray[idx]);
+				printf("%3X:%4d ," , tmp ,ADC_CALC_DATA_TO_VOLTAGE(tmp,ADC_REF_VOLTAGE));
+//				printf("%2X:%2X ," , adc_measure[idx].adc_ch,ADC_DataArray[idx]);
+				
+				if (idx == (ADC_CH_NUM -1) )
+				{
+					printf("\r\n");
+				}				
+			}
+			#endif	
+			
+			break;
+		
+		
+	}
+	
+}
+
 
 void GPIO_Init (void)
 {
     GPIO_SetMode(PB, BIT14, GPIO_MODE_OUTPUT);
+
+    GPIO_SetMode(PB, BIT15, GPIO_MODE_OUTPUT);	
 }
+
 
 void TMR3_IRQHandler(void)
 {
 //	static uint32_t LOG = 0;
 	static uint16_t CNT = 0;
-	static uint16_t CNT_ADC = 0;
-	static uint8_t flag_num = 0;
 	
     if(TIMER_GetIntFlag(TIMER3) == 1)
     {
@@ -234,19 +309,7 @@ void TMR3_IRQHandler(void)
 			CNT = 0;
 //        	printf("%s : %4d\r\n",__FUNCTION__,LOG++);
 			PB14 ^= 1;
-		}
-
-		if (CNT_ADC++ >= ADC_SAMPLETIME_MS)
-		{		
-			CNT_ADC = 0;
-
-			aADCxCH = adc_data[flag_num].adc_ch;
-			flag_num = (flag_num >= adc_data[flag_num].idx) ? (0) : (flag_num + 1) ;
-		
-			ADC_InitChannel(aADCxCH);
-
-		}
-		
+		}		
     }
 }
 
@@ -301,7 +364,7 @@ void SYS_Init(void)
     CLK_SetModuleClock(TMR3_MODULE, CLK_CLKSEL1_TMR3SEL_PCLK1, 0);
 	
     CLK_EnableModuleClock(ADC_MODULE);	
-    CLK_SetModuleClock(ADC_MODULE, CLK_CLKSEL2_ADCSEL_PCLK1, CLK_CLKDIV0_ADC(2));
+    CLK_SetModuleClock(ADC_MODULE, CLK_CLKSEL2_ADCSEL_PCLK1, CLK_CLKDIV0_ADC(3));
 
     /* Update System Core Clock */
     SystemCoreClockUpdate();
@@ -310,17 +373,21 @@ void SYS_Init(void)
     SYS->GPB_MFPH = (SYS->GPB_MFPH & ~(SYS_GPB_MFPH_PB12MFP_Msk | SYS_GPB_MFPH_PB13MFP_Msk))    |       \
                     (SYS_GPB_MFPH_PB12MFP_UART0_RXD | SYS_GPB_MFPH_PB13MFP_UART0_TXD);
 
-    SYS->GPB_MFPH = (SYS->GPB_MFPH &~( SYS_GPB_MFPH_PB10MFP_Msk )) \
-                    | ( SYS_GPB_MFPH_PB10MFP_ADC0_CH10) ;
+    SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB6MFP_Msk )) \
+                    | (SYS_GPB_MFPL_PB6MFP_ADC0_CH6 ) ;
 
-    SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB0MFP_Msk | SYS_GPB_MFPL_PB4MFP_Msk| SYS_GPB_MFPL_PB7MFP_Msk)) \
-                    | (SYS_GPB_MFPL_PB0MFP_ADC0_CH0 | SYS_GPB_MFPL_PB4MFP_ADC0_CH4| SYS_GPB_MFPL_PB7MFP_ADC0_CH7) ;
+    SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB5MFP_Msk | SYS_GPB_MFPL_PB4MFP_Msk| SYS_GPB_MFPL_PB3MFP_Msk)) \
+                    | (SYS_GPB_MFPL_PB5MFP_ADC0_CH5 | SYS_GPB_MFPL_PB4MFP_ADC0_CH4| SYS_GPB_MFPL_PB3MFP_ADC0_CH3) ;
+
+    SYS->GPB_MFPL = (SYS->GPB_MFPL &~(SYS_GPB_MFPL_PB2MFP_Msk | SYS_GPB_MFPL_PB1MFP_Msk| SYS_GPB_MFPL_PB0MFP_Msk)) \
+                    | (SYS_GPB_MFPL_PB2MFP_ADC0_CH2 | SYS_GPB_MFPL_PB1MFP_ADC0_CH1| SYS_GPB_MFPL_PB0MFP_ADC0_CH0) ;
 
     /* Set PB.0 ~ PB.3 to input mode */
-    GPIO_SetMode(PB, BIT0|BIT4|BIT7|BIT10, GPIO_MODE_INPUT);
+    GPIO_SetMode(PB, BIT0|BIT1|BIT2|BIT3|BIT4|BIT5|BIT6, GPIO_MODE_INPUT);
 
     /* Disable the PB0 ~ PB3 digital input path to avoid the leakage current. */
-    GPIO_DISABLE_DIGITAL_PATH(PB, BIT0|BIT4|BIT7|BIT10);
+    GPIO_DISABLE_DIGITAL_PATH(PB, BIT0|BIT1|BIT2|BIT3|BIT4|BIT5|BIT6);
+
 
     /* Lock protected registers */
     SYS_LockReg();
@@ -336,45 +403,25 @@ void SYS_Init(void)
 
 int main()
 {
-	uint8_t idx = 0;
-	uint16_t adc_data = 0;	
-
     SYS_Init();
 
     UART0_Init();
-
 	GPIO_Init();
-
 	TIMER3_Init();
-
+	
     /* Enable ADC converter */
     ADC_POWER_ON(ADC);
 
     /*Wait for ADC internal power ready*/
     CLK_SysTickDelay(10000);
 
+	ADC_Process(State_avergage);
+
     /* Got no where to go, just loop forever */
     while(1)
     {
-		#if 1
-		adc_data = ADCxConvertedData[idx];
-//		convertDecToBin(adc_data);
-		printf("0x%2X:0x%3X(%4dmv)," , idx , adc_data , ADC_CALC_DATA_TO_VOLTAGE(adc_data,ADC_REF_VOLTAGE));
-
-		if (idx++ >= 3)
-		{
-			printf("\r\n");
-			idx = 0;
-		}
-//		idx = (idx++ >= 3) ? (0) : (idx) ;
+		ADC_Process(State_moving);
 		
-		#else
-		convertDecToBin(adc_value1);
-		printf(" 0x%4X , %4dmv " , adc_value1 , ADC_CALC_DATA_TO_VOLTAGE(adc_value1,ADC_REF_VOLTAGE));
-		printf("      ");
-		convertDecToBin(adc_value2);	
-		printf(" 0x%4X , %4dmv\r\n" , adc_value2, ADC_CALC_DATA_TO_VOLTAGE(adc_value2,ADC_REF_VOLTAGE));
-		#endif
     }
 }
 
